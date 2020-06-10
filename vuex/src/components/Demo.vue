@@ -1,6 +1,7 @@
 <template>
   <div class="demo">
     <button @click="add">Add</button>
+    <button @click="sub">Sub</button>
     <span>
       hello
       {{ $store.state.count }}
@@ -18,6 +19,10 @@ export default {
   methods: {
     add(){
       this.$store.state.count++;
+    },
+    sub(){
+      this.$store.commit("sub");
+      this.$store.commit("person/sub");
     }
   }
 }
@@ -28,7 +33,7 @@ export default {
     display: block;
     width: 100px;
     height: 30px;
-    margin: 0 auto;
+    margin: 5px auto;
   }
   span {
     display: block;
