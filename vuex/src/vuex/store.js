@@ -8,6 +8,7 @@ export default class Store {
     this._options = options;
     this._vm = this._initVm(options, this);
     this._mutations = this._registerMutations(options);
+    this._actions = this._register(options, this._actionsPushHandler, "actions");
     console.log(this._vm);
   }
 
@@ -15,7 +16,53 @@ export default class Store {
     return this._vm.state;
   }
 
-  commit(type, payload){
+  commit(_type, _payload){
+    const { type, payload } = this._anasysPayload(_type, _payload);
+    const fns = this._mutations[type];
+    const state = this._getStateByNamespace(type.split("/"), this);
+    const tempCommmit = this.commiting;
+    this.commiting = true;
+    fns.forEach(fn => {
+      fn(state, payload);
+    });
+    this.commiting = tempCommmit;
+  }
+
+  dispatch(_type, _payload){
+    const { type, payload } = this._anasysPayload(_type, _payload);
+    const namespace = type.split("/");
+    const context = {
+      commit: this._getFunByNamespace(namespace, "commit"),
+      dispatch: this._getFunByNamespace(namespace, "dispatch"),
+      state: this._getStateByNamespace(namespace, this),
+      getters: this._getGettersByNamespace(namespace, this),
+      rootState: this.state,
+      rootGetters: this.getters
+    }
+    const fns = this._actions[type];
+    if(fns.length > 1){
+      return Promise.all(fns.map( fn => fn.call(this, context, payload)));
+    }else if(fns.length == 1){
+      const res = fns[0].call(this, context, payload);
+      if(res && typeof res.then == "function"){
+        return res;
+      }else{
+        return Promise.resolve(res);
+      }
+    }
+  }
+
+  // 根据命名空间来获取完整的执行函数
+  _getFunByNamespace(pathList, name){
+    return (t, p) => {
+      const fullPathList = pathList.slice(0, -1);
+      fullPathList.push(t);
+      console.log(fullPathList.join("/"));
+      this[name](fullPathList.join("/"), p);
+    }
+  }
+
+  _anasysPayload(type, payload){
     let arg = {}
     if(Object.prototype.toString.call(type).includes("Object]")){
       arg = type;
@@ -23,14 +70,7 @@ export default class Store {
       arg.type = type;
       arg.payload = payload;
     }
-    const fns = this._mutations[arg.type];
-    const state = this._getStateByNamespace(arg.type.split("/"), this);
-    const tempCommmit = this.commiting;
-    this.commiting = true;
-    fns.forEach(fn => {
-      fn(state);
-    });
-    this.commiting = tempCommmit;
+    return arg;
   }
 
   _initVm(options, self) {
@@ -114,6 +154,13 @@ export default class Store {
     return result;
   }
 
+  _actionsPushHandler(result, key, value, fullKey, pathList){
+    if(!result[fullKey]){
+      result[fullKey] = [];
+    }
+    result[fullKey].push(value);
+  }
+
   /**
    * @description 统一注册函数(用于将配置项拍平)
    * @param {Object} module vuex配置的一个模块
@@ -121,10 +168,11 @@ export default class Store {
    * @param {Array} pathList 命名空间数组
    * @param {Object} result 最终结果
    */
-  _register(module, pushHandler, pathList=[], result={}){
-    const { mutations, modules } = module;
-    if(mutations){
-      forEachVal(mutations, (key, value) => {
+  _register(module, pushHandler, target, pathList=[], result={}){
+    const { modules } = module;
+    const attr = module[target];
+    if(attr){
+      forEachVal(attr, (key, value) => {
         let tempKey = pathList.concat(key).join("/");
         pushHandler && pushHandler.call(this, result, key, value, tempKey, pathList);
       });
@@ -135,7 +183,7 @@ export default class Store {
         if(value.namespaced){
           tempPaths.push(key);
         }
-        this._register(value, pushHandler, tempPaths, result);
+        this._register(value, pushHandler, target, tempPaths, result);
       })
     }
     return result;
@@ -189,7 +237,6 @@ export default class Store {
   _delayArgs(pathList){
     const args = {}
     const self = this;
-    // console.log(self);
     Object.defineProperties(args, {
       "0": {
         get: () => self._getStateByNamespace(pathList, self)

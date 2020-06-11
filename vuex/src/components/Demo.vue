@@ -18,7 +18,9 @@ export default {
   },
   methods: {
     add(){
-      this.$store.state.count++;
+      this.$store.dispatch("person/subAction").then(() => {
+        console.log("ojbk");
+      });
     },
     sub(){
       this.$store.commit("sub");
